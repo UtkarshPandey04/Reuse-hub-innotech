@@ -16,13 +16,16 @@ export async function POST(request: NextRequest) {
     const apiSecret = process.env.CLOUDINARY_API_SECRET
 
     if (!cloudName || !apiKey || !apiSecret) {
-      console.error('Missing Cloudinary environment variables:', {
-        hasCloudName: !!cloudName,
-        hasApiKey: !!apiKey,
-        hasApiSecret: !!apiSecret
-      })
+      const missingVars = []
+      if (!cloudName) missingVars.push('CLOUDINARY_CLOUD_NAME')
+      if (!apiKey) missingVars.push('CLOUDINARY_API_KEY')
+      if (!apiSecret) missingVars.push('CLOUDINARY_API_SECRET')
+      
+      console.error('Missing Cloudinary environment variables:', missingVars)
       return NextResponse.json({ 
-        error: 'Upload service not configured. Missing Cloudinary credentials.' 
+        error: 'Upload service not configured. Missing Cloudinary credentials.',
+        missingVariables: missingVars,
+        message: 'Please configure the following environment variables in your Vercel dashboard: ' + missingVars.join(', ')
       }, { status: 500 })
     }
 
@@ -57,15 +60,20 @@ export async function POST(request: NextRequest) {
     const base64String = buffer.toString('base64')
     const dataUri = `data:${file.type};base64,${base64String}`
 
-    // Upload to Cloudinary
-    const uploadResult = await cloudinary.uploader.upload(dataUri, {
-      folder: 'reusehub-profiles',
-      resource_type: 'image',
-      transformation: [
-        { width: 300, height: 300, crop: 'fill' },
-        { quality: 'auto' }
-      ]
-    }) as any
+    // Upload to Cloudinary with timeout protection
+    const uploadResult = await Promise.race([
+      cloudinary.uploader.upload(dataUri, {
+        folder: 'reusehub-profiles',
+        resource_type: 'image',
+        transformation: [
+          { width: 300, height: 300, crop: 'fill' },
+          { quality: 'auto' }
+        ]
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Upload timeout after 60 seconds')), 60000)
+      )
+    ]) as any
 
     if (!uploadResult || !uploadResult.secure_url) {
       throw new Error('Cloudinary upload failed: No URL returned')
@@ -84,17 +92,34 @@ export async function POST(request: NextRequest) {
       response: error?.response
     })
     
-    const errorMessage = error?.message || 'Upload failed'
-    const errorDetails = process.env.NODE_ENV === 'development' ? {
-      message: error?.message,
-      stack: error?.stack,
-      http_code: error?.http_code,
-      response: error?.response
-    } : undefined
+    // Provide user-friendly error messages
+    let errorMessage = 'Upload failed'
+    let errorDetails: any = undefined
+    
+    if (error?.message?.includes('timeout')) {
+      errorMessage = 'Upload timed out. Please try again with a smaller image.'
+    } else if (error?.http_code === 401) {
+      errorMessage = 'Invalid Cloudinary credentials. Please check your API key and secret.'
+    } else if (error?.http_code === 400) {
+      errorMessage = `Cloudinary upload failed: ${error?.message || 'Invalid request'}`
+    } else if (error?.message) {
+      errorMessage = error.message
+    }
+    
+    // Include detailed error information in development
+    if (process.env.NODE_ENV === 'development' || error?.http_code) {
+      errorDetails = {
+        message: error?.message,
+        http_code: error?.http_code,
+        response: error?.response,
+        ...(process.env.NODE_ENV === 'development' && { stack: error?.stack })
+      }
+    }
     
     return NextResponse.json({ 
       error: errorMessage,
-      details: errorDetails 
+      details: errorDetails,
+      hint: 'Check your Vercel environment variables: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET'
     }, { status: 500 })
   }
 }

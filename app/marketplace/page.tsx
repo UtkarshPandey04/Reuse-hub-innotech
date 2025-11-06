@@ -270,13 +270,16 @@ export default function Marketplace() {
           description: "Product image has been uploaded successfully"
         })
       } else {
-        throw new Error('Failed to upload image')
+        const errorData = await response.json().catch(() => ({ error: 'Failed to upload image' }))
+        const errorMessage = errorData.message || errorData.error || 'Failed to upload image'
+        throw new Error(errorMessage)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading image:', error)
+      const errorMessage = error?.message || 'Failed to upload image'
       toast({
         title: "Upload failed",
-        description: "Failed to upload image",
+        description: errorMessage,
         variant: "destructive"
       })
     } finally {

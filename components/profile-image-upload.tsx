@@ -46,12 +46,14 @@ export function ProfileImageUpload({ currentImage, onImageChange, userName }: Pr
         const data = await response.json()
         onImageChange(data.url)
       } else {
-        const error = await response.json()
-        alert(error.error || 'Upload failed')
+        const errorData = await response.json().catch(() => ({ error: 'Upload failed' }))
+        const errorMessage = errorData.message || errorData.error || 'Upload failed'
+        alert(errorMessage + (errorData.hint ? `\n\n${errorData.hint}` : ''))
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload error:', error)
-      alert('Upload failed. Please try again.')
+      const errorMessage = error?.message || 'Upload failed. Please try again.'
+      alert(errorMessage)
     } finally {
       setUploading(false)
     }
