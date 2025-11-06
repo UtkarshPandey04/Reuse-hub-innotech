@@ -8,9 +8,14 @@ export async function GET() {
     await connectToDatabase()
     const products = await Product.find({}).populate('sellerId', 'username displayName')
     return NextResponse.json(products)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching products:', error)
-    return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
+    const errorMessage = error?.message || 'Failed to fetch products'
+    const errorDetails = process.env.NODE_ENV === 'development' ? error?.stack : undefined
+    return NextResponse.json({ 
+      error: errorMessage,
+      details: errorDetails 
+    }, { status: 500 })
   }
 }
 
@@ -22,6 +27,11 @@ export async function POST(request: NextRequest) {
 
     if (!sellerId || !title || !price) {
       return NextResponse.json({ error: 'Seller ID, title, and price are required' }, { status: 400 })
+    }
+
+    // Validate sellerId is a valid ObjectId
+    if (!sellerId.match(/^[0-9a-fA-F]{24}$/)) {
+      return NextResponse.json({ error: 'Invalid seller ID format' }, { status: 400 })
     }
 
     const product = new Product({
@@ -39,16 +49,27 @@ export async function POST(request: NextRequest) {
     const populatedProduct = await Product.findById(product._id).populate('sellerId', 'username displayName')
 
     // Log activity
-    await Activity.create({
-      userId: sellerId,
-      type: 'product_add',
-      description: 'Added new product to marketplace',
-      metadata: { productId: product._id, title, category, price }
-    })
+    try {
+      await Activity.create({
+        userId: sellerId,
+        type: 'product_add',
+        description: 'Added new product to marketplace',
+        metadata: { productId: product._id, title, category, price }
+      })
+    } catch (activityError) {
+      // Don't fail the request if activity logging fails
+      console.error('Error logging activity:', activityError)
+    }
 
     return NextResponse.json(populatedProduct, { status: 201 })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating product:', error)
-    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
+    // Provide more detailed error information
+    const errorMessage = error?.message || 'Failed to create product'
+    const errorDetails = process.env.NODE_ENV === 'development' ? error?.stack : undefined
+    return NextResponse.json({ 
+      error: errorMessage,
+      details: errorDetails 
+    }, { status: 500 })
   }
 }

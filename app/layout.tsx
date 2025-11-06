@@ -15,6 +15,9 @@ export const metadata: Metadata = {
   description:
     "Join the sustainable revolution with ReuseHub - Track waste, buy/sell secondhand items, and earn eco-rewards!",
   generator: "v0.app",
+  icons: {
+    icon: "/placeholder-logo.svg",
+  },
 }
 
 export default function RootLayout({

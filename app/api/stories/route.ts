@@ -24,7 +24,7 @@ export async function GET() {
   try {
     await connectToDatabase()
     const stories = await Story.find({}).populate('authorId', 'username displayName avatarUrl')
-    return NextResponse.json(stories)
+    return NextResponse.json({ stories })
   } catch (error) {
     console.error('Error fetching stories:', error)
     return NextResponse.json({ error: 'Failed to fetch stories' }, { status: 500 })

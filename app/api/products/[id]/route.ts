@@ -5,31 +5,38 @@ import Activity from '@/lib/models/Activity'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToDatabase()
-    const product = await Product.findById(params.id).populate('sellerId', 'username displayName')
+    const { id } = await params
+    const product = await Product.findById(id).populate('sellerId', 'username displayName')
     if (!product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
     return NextResponse.json(product)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching product:', error)
-    return NextResponse.json({ error: 'Failed to fetch product' }, { status: 500 })
+    const errorMessage = error?.message || 'Failed to fetch product'
+    const errorDetails = process.env.NODE_ENV === 'development' ? error?.stack : undefined
+    return NextResponse.json({ 
+      error: errorMessage,
+      details: errorDetails 
+    }, { status: 500 })
   }
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToDatabase()
+    const { id } = await params
     const body = await request.json()
     const { title, description, category, price, imageUrl, quantity, status } = body
 
-    const product = await Product.findById(params.id)
+    const product = await Product.findById(id)
     if (!product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
@@ -44,47 +51,68 @@ export async function PUT(
     if (status !== undefined) product.status = status
 
     await product.save()
-    const updatedProduct = await Product.findById(params.id).populate('sellerId', 'username displayName')
+    const updatedProduct = await Product.findById(id).populate('sellerId', 'username displayName')
 
     // Log activity
-    await Activity.create({
-      userId: product.sellerId,
-      type: 'product_update',
-      description: 'Updated product in marketplace',
-      metadata: { productId: params.id, title: product.title }
-    })
+    try {
+      await Activity.create({
+        userId: product.sellerId,
+        type: 'product_update',
+        description: 'Updated product in marketplace',
+        metadata: { productId: id, title: product.title }
+      })
+    } catch (activityError) {
+      // Don't fail the request if activity logging fails
+      console.error('Error logging activity:', activityError)
+    }
 
     return NextResponse.json(updatedProduct)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error updating product:', error)
-    return NextResponse.json({ error: 'Failed to update product' }, { status: 500 })
+    const errorMessage = error?.message || 'Failed to update product'
+    const errorDetails = process.env.NODE_ENV === 'development' ? error?.stack : undefined
+    return NextResponse.json({ 
+      error: errorMessage,
+      details: errorDetails 
+    }, { status: 500 })
   }
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToDatabase()
-    const product = await Product.findById(params.id)
+    const { id } = await params
+    const product = await Product.findById(id)
     if (!product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
 
-    await Product.findByIdAndDelete(params.id)
+    await Product.findByIdAndDelete(id)
 
     // Log activity
-    await Activity.create({
-      userId: product.sellerId,
-      type: 'product_delete',
-      description: 'Removed product from marketplace',
-      metadata: { productId: params.id, title: product.title }
-    })
+    try {
+      await Activity.create({
+        userId: product.sellerId,
+        type: 'product_delete',
+        description: 'Removed product from marketplace',
+        metadata: { productId: id, title: product.title }
+      })
+    } catch (activityError) {
+      // Don't fail the request if activity logging fails
+      console.error('Error logging activity:', activityError)
+    }
 
     return NextResponse.json({ message: 'Product deleted successfully' })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error deleting product:', error)
-    return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 })
+    const errorMessage = error?.message || 'Failed to delete product'
+    const errorDetails = process.env.NODE_ENV === 'development' ? error?.stack : undefined
+    return NextResponse.json({ 
+      error: errorMessage,
+      details: errorDetails 
+    }, { status: 500 })
   }
 }

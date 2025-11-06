@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://code-two-kohl.vercel.app/sitemap.xml
+
+
